@@ -1,0 +1,30 @@
+clear all
+close all 
+clc 
+
+data = readtable('ppg_lab3.csv');
+
+data.Properties.VariableNames
+
+amb = data.PPG1; 
+ir = data.PPG2; 
+red = data.PPG3;
+realIR = ir 
+
+time = data{:, 1};
+ppgSignal3 = data{:, 3};
+ppgSignal4 = data{:, 4};
+
+
+figure;
+plot(time, ppgSignal4);
+xlabel('Time');
+ylabel('PPG Signal 4');
+title('PPG Signal 4');
+
+
+figure;
+plot(time, ppgSignal3);
+xlabel('Time');
+ylabel('PPG Signal 3');
+title('PPG Signal 3');
