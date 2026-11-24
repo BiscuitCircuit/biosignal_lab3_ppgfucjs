@@ -36,7 +36,7 @@ amb = fillmissing(amb, 'linear');
 ir  = fillmissing(ir,  'linear');
 red = fillmissing(red, 'linear');
 
-% Subtract ambient light from instrucitons
+% Subtract ambient light from instructions
 realIR  = ir  - amb;
 realRed = red - amb;
 
@@ -51,7 +51,7 @@ subplot(2,1,2);
 plot(t, realRed, 'r');
 title('Red: Ambient Subtracted');
 xlabel('Time (s)'); ylabel('Amplitude'); grid on;
-%saveas(gcf, 'fig2_ambient_corrected.png');
+saveas(gcf, 'fig2_ambient_corrected.png');
 
 
 
@@ -68,13 +68,13 @@ xlabel('Time (s)'); ylabel('Amplitude'); grid on;
 
 subplot(2,1,2);
 plot(t, redHP, 'r');
-title(sprintf('Red: High-Pass Filtered (%.1f Hz cutu off)', fc));
+title(sprintf('Red: High-Pass Filtered (%.1f Hz cut off)', fc));
 xlabel('Time (s)'); ylabel('Amplitude'); grid on;
-%saveas(gcf, 'fig3_highpass.png');
+saveas(gcf, 'fig3_highpass.png');
 
 
 %% Step 4: Savitzky-Golay smoothing to remove high-frequency noise
-span = 9;   % window length in samples (odd number), 15 samples = about 0.23 s
+span = 9;   % window length in samples (odd number), 9 samples = about 0.14 s
 deg  = 3;    % polynomial order
 
 irClean  = sgolayfilt(irHP,  deg, span);
@@ -83,14 +83,14 @@ redClean = sgolayfilt(redHP, deg, span);
 figure;
 subplot(2,1,1);
 plot(t, irClean);
-title(sprintf('IR: High-Pass & Savitzky-Golay)', span));
+title(sprintf('IR: High-Pass & Savitzky-Golay (%d samples)', span));
 xlabel('Time (s)'); ylabel('Amplitude'); grid on;
 
 subplot(2,1,2);
 plot(t, redClean, 'r');
-title(sprintf('Red: High-Pass & Savitzky-Golay)', span));
+title(sprintf('Red: High-Pass & Savitzky-Golay (%d samples)', span));
 xlabel('Time (s)'); ylabel('Amplitude'); grid on;
-%saveas(gcf, 'fig4_cleaned.png');
+saveas(gcf, 'fig4_cleaned.png');
 
 %% Step 5: Plotting the Power Spectral Density (PSD) 
 N = length(irClean);
@@ -114,6 +114,7 @@ plot(f, pRed, 'r');
 title('Red: Power Spectrum');
 xlabel('Frequency (Hz)'); ylabel('Power');
 xlim([0 5]); grid on;
+saveas(gcf, 'fig5_psd.png');
 
 %% Step 6: Heartbeat from PSD
 
@@ -131,7 +132,7 @@ hr_ir = fband(max_in_ir) * 60;
 hr_red = fband(max_in_red) * 60;
 
 fprintf('Heart rate(IR): %.1f bpm\n',hr_ir);
-fprintf('Heart rate(IR): %.1f bpm\n',hr_red);
+fprintf('Heart rate(Red): %.1f bpm\n',hr_red);
 
 %% Step 7: Heart rate by counting peaks
 t1 = 10;  
@@ -157,10 +158,11 @@ plot(locsIR, pksIR,'.','MarkerSize',20);
 title('IR: Detected Peaks');
 xlabel('Time (s)'); ylabel('Amplitude'); grid on;
 subplot(2,1,2);
-plot(t_seg, red_seg); hold on;
+plot(t_seg, red_seg, 'r'); hold on;
 plot(locsRed, pksRed, '.','MarkerSize',20);
 title('Red: Detected Peaks');
 xlabel('Time (s)'); ylabel('Amplitude'); grid on;
+saveas(gcf, 'fig6_peaks.png');
 
 
 %% Step 8: Compare peak counting method vs PSD for heart rate
@@ -195,4 +197,50 @@ fprintf('\nHeart Rate Variability:\n');
 fprintf('IR: RMS peak time: %.3f s, SDNN: %.3f s\n', rmssd_ir, sdnn_ir);
 fprintf('Red: RMS peak time: %.3f s, SDNN: %.3f s\n',rmssd_red, sdnn_red);
 
+%% Step 10: Autocorrelation
+[acIR, lagsAC] = xcorr(irClean - mean(irClean), 'coeff');
+acRed = xcorr(redClean - mean(redClean), 'coeff');
+tau = lagsAC(:) / fs;                 % time offset in seconds
 
+% first peak after zero lag = heartbeat period
+win = tau > 0.4 & tau < 1.2;
+tauWin = tau(win);
+[acPk_ir, i_ir] = max(acIR(win));
+[acPk_red, i_red] = max(acRed(win));
+
+fprintf('\nAutocorrelation first peak:\n');
+fprintf('IR:  lag %.3f s, value %.2f, heart rate %.1f bpm\n', tauWin(i_ir), acPk_ir, 60/tauWin(i_ir));
+fprintf('Red: lag %.3f s, value %.2f, heart rate %.1f bpm\n', tauWin(i_red), acPk_red, 60/tauWin(i_red));
+
+figure;
+subplot(2,1,1);
+plot(tau, acIR); hold on;
+plot(tauWin(i_ir), acPk_ir, 'ko');
+title('IR: Autocorrelation');
+xlabel('Time offset (s)'); ylabel('Normalized autocorrelation'); xlim([-10 10]); grid on;
+subplot(2,1,2);
+plot(tau, acRed, 'r'); hold on;
+plot(tauWin(i_red), acPk_red, 'ko');
+title('Red: Autocorrelation');
+xlabel('Time offset (s)'); ylabel('Normalized autocorrelation'); xlim([-10 10]); grid on;
+saveas(gcf, 'fig7_autocorr.png');
+
+%% Step 11: Cross-correlation of the Red and IR channels
+[xc, lagsXC] = xcorr(irClean - mean(irClean), redClean - mean(redClean), 'coeff');
+[xcMax, iMax] = max(xc);
+
+fprintf('\nCross-correlation (IR vs Red):\n');
+fprintf('Maximum %.3f at lag %d samples = %.4f s\n', xcMax, lagsXC(iMax), lagsXC(iMax)/fs);
+fprintf('Values at lags -1, 0, +1 samples: %.3f %.3f %.3f\n', xc(lagsXC==-1), xc(lagsXC==0), xc(lagsXC==1));
+
+figure;
+subplot(2,1,1);
+plot(lagsXC/fs, xc); hold on;
+plot(lagsXC(iMax)/fs, xcMax, 'ko');
+title('Cross-correlation of IR and Red');
+xlabel('Time offset (s)'); ylabel('Normalized cross-correlation'); xlim([-10 10]); grid on;
+subplot(2,1,2);
+stem(lagsXC, xc, 'filled');
+title('Cross-correlation near zero lag');
+xlabel('Lag (samples)'); ylabel('Normalized cross-correlation'); xlim([-10 10]); grid on;
+saveas(gcf, 'fig8_xcorr.png');
